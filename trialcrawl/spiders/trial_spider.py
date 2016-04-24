@@ -6,29 +6,40 @@ from scrapy.spiders import Spider
 from scrapy.selector import Selector
 from trialcrawl.items import TrialcrawlItem
 
+
+
 class TrialSpider(Spider):
     name = "trial"
     allowed_domains = ["hhgregg.com"]
     start_urls = ["http://www.hhgregg.com/shop-all-categories"]
 
+
     def parse(self, response):
         for sel in response.css("ul > li.subcategory > a::attr('href')"):
-            url = response.urljoin(sel.extract())
-            yield scrapy.Request(url, callback=self.parse_dir_contents)
+            url = response.urljoin(sel.extract()) + '?facet:&productBeginIndex:0&orderBy:3&pageView:list&minPrice:&maxPrice:&'
+            yield scrapy.Request(url, callback=self.parse_dir_contents, dont_filter=True)
 
     def parse_dir_contents(self, response):
         urls = response.css(".product_name a::attr(href)")
+        subpages = len(urls)
         for url in urls:
             product = response.urljoin(url.extract())
             yield scrapy.Request(product, callback=self.parse_product_items)
+
+        if subpages == 48:
+            index = re.match('.*productBeginIndex:([0-9]*).*', response.url)
+            if index:
+                count = int(index.group(1)) + 48
+                url = re.sub('productBeginIndex:([0-9]*)', 'productBeginIndex:{}'.format(count), response.url)
+                yield scrapy.Request(url, callback=self.parse_dir_contents, dont_filter=True)
+
 
 
     def parse_product_items(self, response):
         item = TrialcrawlItem()
         item["url"] = response.url
-        item["title"] = response.xpath('//div[contains(@id, "CatalogEntryViewDetails_productInfo")]/div[@class="product_name"]/text()').extract_first().encode('utf-8').strip('\t\n\r \"\'')
         model = response.xpath("//div[starts-with(@id, 'CatalogEntryViewDetails_productInfo')]/p[@class='model']/text()").extract()
-        item["model"] = re.sub("Model: ", '', model[0])
+        item["model"] = re.sub("Model: ", '', model[0]) if model else model
         item["specs"] = self.get_spec_values(response)
         item["upc"] = ''
         if item["specs"]:
@@ -49,6 +60,7 @@ class TrialSpider(Spider):
         item["description"] = self.format_list_vals(desc)
         features = response.xpath('//span[starts-with(@id, "descAttributeValue")]/text()').extract()
         item["features"] = self.format_list_vals(features)
+        item["primary_image_url"] = "http://hhgregg.scene7.com/is/image/hhgregg/{}_a1_main".format(item["model"])
 
 
         productinfo = self.get_data_from_js(response)
@@ -57,6 +69,7 @@ class TrialSpider(Spider):
         yield item
 
     def get_data_from_product_info(self, item, productinfo):
+        item["title"] = productinfo.get("name")
         item["brand"] = productinfo.get("brand")
         item["current_price"] = float(productinfo.get("offer_price"))
         item["original_price"] = float(productinfo.get("base_price"))
@@ -64,11 +77,6 @@ class TrialSpider(Spider):
         item["sku"] = productinfo.get("sku")
         val =  float(productinfo.get("review_stars"))
         item["rating"] = str(val/5*100)
-        for key, val in productinfo.iteritems():
-            if "thumbnailURL" in key:
-                image = key.split(' ')[0].strip("\"\'")
-                item["primary_image_url"] = re.sub("\?.*$", '', image)
-                break
         return item
 
 
