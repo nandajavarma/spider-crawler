@@ -22,28 +22,24 @@ class TrialSpider(Spider):
             product = response.urljoin(url.extract())
             yield scrapy.Request(product, callback=self.parse_product_items)
 
+
     def parse_product_items(self, response):
         item = TrialcrawlItem()
-        productinfo = self.get_data_from_js(response)
-        item["title"] = productinfo.get("name")
-        item["brand"] = productinfo.get("brand")
+        item["url"] = response.url
+        item["title"] = response.xpath('//div[contains(@id, "CatalogEntryViewDetails_productInfo")]/div[@class="product_name"]/text()').extract_first().encode('utf-8').strip('\t\n\r \"\'')
         model = response.xpath("//div[starts-with(@id, 'CatalogEntryViewDetails_productInfo')]/p[@class='model']/text()").extract()
         item["model"] = re.sub("Model: ", '', model[0])
-        item["current_price"] = float(productinfo.get("offer_price"))
-        item["original_price"] = float(productinfo.get("base_price"))
-        item["sku"] = productinfo.get("sku")
-        item["url"] = response.url
         item["specs"] = self.get_spec_values(response)
         item["upc"] = ''
         if item["specs"]:
             for ele in item["specs"]:
                 if ele['name'] == 'Product UPC':
                     item["upc"] = ele['value']
+                elif ele['name'] == 'Manufacturer Model Number':
+                    item["mpn"] = ele['value']
                 else:
                     continue
         item["trail"] = response.xpath('//div[@id="widget_breadcrumb"]/ul/li/a/text()').extract()
-        val =  float(productinfo.get("review_stars"))
-        item["rating"] = str(val/5*100)
         item["currency"] =  response.css('#currentOrderCurrency::attr(value)').extract()
         online_only =  response.css('.online_only_text_reviews::text').extract()
         item["available_instore"] = False if online_only else True
@@ -53,13 +49,28 @@ class TrialSpider(Spider):
         item["description"] = self.format_list_vals(desc)
         features = response.xpath('//span[starts-with(@id, "descAttributeValue")]/text()').extract()
         item["features"] = self.format_list_vals(features)
+
+
+        productinfo = self.get_data_from_js(response)
+        if productinfo:
+            item = self.get_data_from_product_info(item, productinfo)
+        yield item
+
+    def get_data_from_product_info(self, item, productinfo):
+        item["brand"] = productinfo.get("brand")
+        item["current_price"] = float(productinfo.get("offer_price"))
+        item["original_price"] = float(productinfo.get("base_price"))
+        item["retailer_id"] = productinfo.get("catentryid")
+        item["sku"] = productinfo.get("sku")
+        val =  float(productinfo.get("review_stars"))
+        item["rating"] = str(val/5*100)
         for key, val in productinfo.iteritems():
             if "thumbnailURL" in key:
                 image = key.split(' ')[0].strip("\"\'")
                 item["primary_image_url"] = re.sub("\?.*$", '', image)
                 break
+        return item
 
-        yield item
 
     def format_list_vals(self, val):
         return filter(None, map(lambda x: x.strip("\n\r\t \"\'"), val))
