@@ -1,0 +1,5 @@
+Researching and setting up scrapy: 1 hour
+Starting to write the spider crawler for basic items: 1 hour
+Figuring out ways to scrape items rendered by JS, like pagination,
+images : 2 hours
+Deploying it on scrapy cloud platform, testing and fixing bugs: 2 hours

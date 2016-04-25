@@ -33,8 +33,9 @@ class TrialSpider(Spider):
             index = re.match('.*productBeginIndex:([0-9]*).*', response.url)
             if index:
                 count = int(index.group(1)) + 48
-                url = re.sub('productBeginIndex:([0-9]*)', 'productBeginIndex:{}'.format(count), response.url)
-                yield scrapy.Request(url, callback=self.parse_dir_contents, dont_filter=True)
+                if count <= 480:
+                    url = re.sub('productBeginIndex:([0-9]*)', 'productBeginIndex:{}'.format(count), response.url)
+                    yield scrapy.Request(url, callback=self.parse_dir_contents, dont_filter=True)
 
 
 
