@@ -24,7 +24,10 @@ class TrialSpider(Spider):
         subpages = len(urls)
         for url in urls:
             product = response.urljoin(url.extract())
-            yield scrapy.Request(product, callback=self.parse_product_items)
+            yield scrapy.Request(product,
+                    callback=self.parse_product_items, meta={'splash': {
+                        'args': {'wait': 0.5},
+                        'endpoint': 'render.html'}})
 
         if subpages == 48:
             index = re.match('.*productBeginIndex:([0-9]*).*', response.url)
@@ -61,6 +64,19 @@ class TrialSpider(Spider):
         features = response.xpath('//span[starts-with(@id, "descAttributeValue")]/text()').extract()
         item["features"] = self.format_list_vals(features)
         item["primary_image_url"] = "http://hhgregg.scene7.com/is/image/hhgregg/{}_a1_main".format(item["model"])
+        img = response.xpath('//div[@class="s7thumb"]/@style').extract()
+        item["image_urls"] = []
+        if img:
+            print img, "hellooooooooo"
+            for v in img:
+                val = ''
+                for i in v.split(' '):
+                    if 'url' in i:
+                        val = i
+                if val:
+                    it = val.encode('utf-8').strip('url\(\)')
+                    if it != item["primary_image_url"]:
+                        item["image_urls"].append(re.sub('\?.*$', '', it))
 
 
         productinfo = self.get_data_from_js(response)
